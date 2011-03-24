@@ -29,6 +29,35 @@
  * Initializes kernel subsystems, mounts filesystems,
  * and spawns init process.
  */
+
+void func(ulong_t arg)
+{
+	Keycode	input;
+
+	Print("Hello from Martin\n");
+	do
+	{
+		input=Wait_For_Key();
+		if((input & KEY_RELEASE_FLAG)==0)
+		{
+			// Todo: arreglar el Ctrl-D
+			Print("%c",input & 0x00ff );
+		}
+	} while(
+		(input & KEY_CTRL_FLAG) == 0x0 || 
+		((input & 0x00ff) != 'd' && (input & 0x00ff) != 'D')
+		);
+}
+
+void g(ulong_t a)
+{
+	while (1)
+	{
+		Print("%i\n", (int)a);
+		Yield();
+	}
+}
+
 void Main(struct Boot_Info* bootInfo)
 {
     Init_BSS();
@@ -48,19 +77,12 @@ void Main(struct Boot_Info* bootInfo)
     Set_Current_Attr(ATTRIB(BLACK, GRAY));
 
 
-    TODO("Start a kernel thread to echo pressed keys and print counts");
+    //TODO("Start a kernel thread to echo pressed keys and print counts");
+    //Start_Kernel_Thread(func, (ulong_t)0, PRIORITY_NORMAL, false);
 
-
+    Start_Kernel_Thread(g, (ulong_t)1, PRIORITY_NORMAL, false);
+    Start_Kernel_Thread(g, (ulong_t)2, PRIORITY_NORMAL, false);
 
     /* Now this thread is done. */
     Exit(0);
 }
-
-
-
-
-
-
-
-
-
