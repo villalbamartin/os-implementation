@@ -30,6 +30,28 @@
 int Parse_ELF_Executable(char *exeFileData, ulong_t exeFileLength,
     struct Exe_Format *exeFormat)
 {
-    TODO("Parse an ELF executable image");
+    elfHeader	encabezado;	// Encabezado del ELF
+    //int		i=0;		// Variable dummy
+    
+    // Primero cargo el header del elf, para ver sus propiedades
+    // Copio los primeros 52 bytes del mismo en la estructura
+    // (que ocupa lo mismo, segun la especificacion del formato ELF)
+    memcpy(&encabezado,exeFileData,52);
+    if(encabezado.type != 0x02)
+    {
+        // No es un ejecutable, es una librería u otra cosa
+        // Notar que muchas otras cosas podrían fallar acá,
+        // pero las estamos ignorando
+        return -1;
+    }
+    //  Chequeamos la cantidad de segmentos
+    //  Si tiene Program Header (deberia), lo parseamos
+    if((exeFormat->numSegments = encabezado.phnum) == 0)
+    {
+        return -1;
+    }
+    //exeFormat->entryAddr = NO_TENGO_IDEA
+    
+    return 0;
 }
 
