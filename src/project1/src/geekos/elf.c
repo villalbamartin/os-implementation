@@ -31,7 +31,9 @@ int Parse_ELF_Executable(char *exeFileData, ulong_t exeFileLength,
     struct Exe_Format *exeFormat)
 {
     elfHeader	encabezado;	// Encabezado del ELF
-    //int		i=0;		// Variable dummy
+    programHeader ph; // Program Header
+    char*       offsets; // Variable para usar memcpy
+    int		i=0;		// Variable dummy
     
     // Primero cargo el header del elf, para ver sus propiedades
     // Copio los primeros 52 bytes del mismo en la estructura
@@ -44,14 +46,34 @@ int Parse_ELF_Executable(char *exeFileData, ulong_t exeFileLength,
         // pero las estamos ignorando
         return -1;
     }
-    //  Chequeamos la cantidad de segmentos
-    //  Si tiene Program Header (deberia), lo parseamos
-    if((exeFormat->numSegments = encabezado.phnum) == 0)
+    
+    if((exeFormat->numSegments = encabezado.phnum) == 0 || encabezado.phoff == 0)
     {
+        // No tiene Program Header
         return -1;
     }
-    //exeFormat->entryAddr = NO_TENGO_IDEA
-    
+    exeFormat->entryAddr = encabezado.entry;
+    // Rellenamos la estructura
+    for(i=0; i<encabezado.phnum; i++)
+    {
+        // Primero, extraigo la estructura del Program Header
+        offsets = exeFileData;
+        offsets += encabezado.phoff;
+        offsets += encabezado.phentsize*i;
+
+        // Chequear la alineacion creo que no hace falta,
+        // por ser en tiempo de ejecucion
+        memcpy(&ph, offsets, encabezado.phentsize);
+
+        // Ahora que tengo completo el Program Header,
+        // puedo rellenar los segmentos
+        exeFormat->segmentList[i].offsetInFile=ph.offset;
+        exeFormat->segmentList[i].lengthInFile=ph.fileSize;
+        exeFormat->segmentList[i].startAddress=ph.vaddr;
+        exeFormat->segmentList[i].sizeInMemory=ph.memSize;
+        exeFormat->segmentList[i].protFlags=ph.flags;
+    }
+
     return 0;
 }
 
