@@ -102,9 +102,12 @@ int Spawn(const char *program, const char *command, struct Kernel_Thread **pThre
     char* pData = NULL;                        /* Program data */
     ulong_t pLen = 0;                          /* Program length */
     struct Exe_Format pStructure;              /* Structure to store the program */
-    struct User_Context pContext;              /* User Context for the program */
+    struct User_Context* pContext;              /* User Context for the program */
     struct Kernel_Thread* pThreadPtr = NULL;   /* New Kernel Thread */
-    
+
+    Print("Entering Spawn\n");
+    pContext= (struct User_Context*)Malloc(sizeof(struct User_Context));
+
     /* Load program onto buffer */
     if(Read_Fully(program, (void**) &pData, &pLen) != 0) return ENOTFOUND;
 
@@ -113,21 +116,25 @@ int Spawn(const char *program, const char *command, struct Kernel_Thread **pThre
 
     /* Create the user context with the loaded program */
     /* I seriously suspect that "&pContext" is not being passed correctly */
-    if (Load_User_Program(pData, pLen, &pStructure, command, (struct User_Context**) &pContext) != 0) return -1;
+    if (Load_User_Program(pData, pLen, &pStructure, command, (struct User_Context**) pContext) != 0) return -1;
 
     /* Kernel thread with the new context
      * Since we hate multitasking, "detached" will always be false,
      * unless we find a good reason to change this
      * or someone realizes we are doing things the lazy way
      */
-    pThreadPtr = Start_User_Thread(&pContext, 0==1);
+
+    pThreadPtr = Start_User_Thread(pContext, 0==1);
+
+    Print("Leaving Setup_User_Thread\n");
     if(pThreadPtr != NULL)
     {
         *pThread = (void*)pThreadPtr;
-        return 0;
+        return pThreadPtr->pid;
     }
     else
     {
+        /* BUG: ignores ENOTFOUND */
         return -1;
     }
 }

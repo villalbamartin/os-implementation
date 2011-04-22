@@ -107,6 +107,7 @@ static void Spawn_Init_Process(void)
 	int pid = 0;
 	struct Kernel_Thread nThread;
     /* TODO("Spawn the init process"); */
+	Print("Entering Spawn_Init_Process\n");
     pid = Spawn(INIT_PROGRAM, INIT_PROGRAM, (struct Kernel_Thread**) &nThread);
 
     if(pid <= 0)

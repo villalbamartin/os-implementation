@@ -43,6 +43,7 @@ static struct User_Context* Create_User_Context(ulong_t size)
 	ushort_t sel;
 	struct Segment_Descriptor* gdtDesc;
 
+	Print("Entering Create_User_Context\n");
     /* Create a User_Context structure */
 	uContext = Malloc(sizeof(struct User_Context));
     uContext->memory = Malloc(size);
@@ -51,27 +52,32 @@ static struct User_Context* Create_User_Context(ulong_t size)
     /* Allocate an LDT descriptor in the GDT */
     /* BUG: Let's free some memory in case of error*/
     gdtDesc = Allocate_Segment_Descriptor();
-    uContext->ldtDescriptor =
 
-    /* Initialize the LDT in the GDT */
-    /* BUG: This is likely wrong */
-    Init_LDT_Descriptor(uContext->ldtDescriptor,uContext->ldt,NUM_USER_LDT_ENTRIES);
+    /* Initialize the LDT in the GDT
+     * The first argument is right, just trust me,
+     * the second one is the only one that makes sense
+     */
+    Init_LDT_Descriptor(gdtDesc,uContext->ldt,NUM_USER_LDT_ENTRIES);
 
     /* Create a selector */
-    /* BUG: no se que va en el tercer parámetro */
-    sel = Selector(USER_PRIVILEGE, 1==0, 0);
+    sel = Selector(USER_PRIVILEGE, 1==1, uContext->ldtSelector);
 
     /* Initialize the descriptors in LDT */
     /* BUG: probably too much memory being allocated */
-    Init_Code_Segment_Descriptor(uContext->ldtDescriptor, 0, size/PAGE_SIZE, USER_PRIVILEGE);
-    Init_Data_Segment_Descriptor(uContext->ldtDescriptor, 0, size/PAGE_SIZE, USER_PRIVILEGE);
+    /* Also, I can't explain correctly the 2nd parameter */
+    Init_Code_Segment_Descriptor(&uContext->ldtDescriptor[0], (unsigned long) uContext->memory, size/PAGE_SIZE, USER_PRIVILEGE);
+    Init_Data_Segment_Descriptor(&uContext->ldtDescriptor[1], (unsigned long) uContext->memory, size/PAGE_SIZE, USER_PRIVILEGE);
 
-    /* BUG: I don't know where to start... */
-    //uContext->ldtDescriptor[0] = Selector(USER_PRIVILEGE, 1==0, 0);
-    //uContext->ldtDescriptor[1] = Selector(USER_PRIVILEGE, 1==0, 1);
 
-    TODO("Create_User_Context: This function is not complete yet");
-	return uContext;
+    /* Create remaining selectors, inside the LDT */
+    uContext->csSelector = Selector(USER_PRIVILEGE, 1==0, Get_Descriptor_Index(&uContext->ldtDescriptor[0]));
+    uContext->dsSelector = Selector(USER_PRIVILEGE, 1==0, Get_Descriptor_Index(&uContext->ldtDescriptor[1]));
+
+    /* I guess this should be here */
+    uContext->ldtDescriptor = gdtDesc;
+
+    Print("Leaving Create_User_Context\n");
+    return uContext;
 }
 
 
@@ -153,6 +159,7 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
     ulong_t argBSize = 0;
     struct Argument_Block *argBlock;
 
+    Print("Entering Load_User_Program\n");
     /* First, let's parse the arguments */
     Get_Argument_Block_Size(command, &numargs, &argBSize);
 
@@ -197,6 +204,7 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
     /* I calculated this earlier */
     uCont->stackPointerAddr = stackEntry;
 
+    Print("Leaving Load_User_Program\n");
     return 0;
 }
 

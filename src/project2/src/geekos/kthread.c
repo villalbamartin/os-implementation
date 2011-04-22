@@ -16,6 +16,7 @@
 #include <geekos/string.h>
 #include <geekos/kthread.h>
 #include <geekos/malloc.h>
+#include <geekos/user.h> /* Added by me */
 
 
 /* ----------------------------------------------------------------------
@@ -313,7 +314,52 @@ static void Setup_Kernel_Thread(
      * - The esi register should contain the address of
      *   the argument block
      */
-    TODO("Create a new thread to execute in user mode");
+
+    Print("Entering Setup_User_Thread\n");
+    /* If the hint says so... let's attach the user context to the thread*/
+    Attach_User_Context(kthread, userContext);
+
+    /* Let's set the stack now*/
+    /* Data selector */
+    Push(kthread, userContext->dsSelector);
+
+    /* Stack Pointer
+     * BUG: is not 0!
+     */
+    Push(kthread, 0);
+
+    /* EFlAGS
+     * Notar que es copy-paste, así que hay que revisar
+     */
+    Push(kthread, 0UL);
+
+    /* Text Selector */
+    Push(kthread, userContext->csSelector);
+
+    /* EIP */
+    Push(kthread, userContext->entryAddr);
+
+    /* Push fake error code and interrupt number. */
+    Push(kthread, 0);
+    Push(kthread, 0);
+
+    /* Push initial values for general-purpose registers. */
+    Push(kthread, 0);  /* eax */
+    Push(kthread, 0);  /* ebx */
+    Push(kthread, 0);  /* ecx */
+    Push(kthread, 0);  /* edx */
+    Push(kthread, userContext->argBlockAddr);  /* esi */
+    Push(kthread, 0);  /* edi */
+    Push(kthread, 0);  /* ebp */
+
+    /* Selectors */
+    Push(kthread, KERNEL_DS);  /* ds - BUG: FIX THIS!*/
+    Push(kthread, KERNEL_DS);  /* es - BUG: FIX THIS!*/
+    Push(kthread, 0);  /* fs */
+    Push(kthread, 0);  /* gs */
+
+
+    Print("Leaving Setup_User_Thread\n");
 }
 
 
@@ -515,7 +561,27 @@ Start_User_Thread(struct User_Context* userContext, bool detached)
      * - Call Make_Runnable_Atomic() to schedule the process
      *   for execution
      */
-    TODO("Start user thread");
+    struct Kernel_Thread* uThread;
+
+    Print("Entering Start_User_Thread\n");
+    /* Create a thread and setup it */
+
+    /* Create_Thread llama a Init_Thread,
+     * Init_Thread cambia refcount a 1 o 2,
+     * y esto hace saltar una aserción en Attach_User_Context(),
+     * que es llamado en Setup_User_Thread
+     */
+    uThread = Create_Thread(0, detached);
+    uThread->refCount = 0;
+    Setup_User_Thread(uThread, userContext);
+
+    /* Now that Setup_User_Thread has pushed everything into the stack,
+     * I can make this thread runnable
+     */
+    Make_Runnable_Atomic(uThread);
+
+    Print("Leaving Start_User_Thread\n");
+    return uThread;
 }
 
 /*
