@@ -98,7 +98,38 @@ int Spawn(const char *program, const char *command, struct Kernel_Thread **pThre
      * If all goes well, store the pointer to the new thread in
      * pThread and return 0.  Otherwise, return an error code.
      */
-    TODO("Spawn a process by reading an executable from a filesystem");
+
+    char* pData = NULL;                        /* Program data */
+    ulong_t pLen = 0;                          /* Program length */
+    struct Exe_Format pStructure;              /* Structure to store the program */
+    struct User_Context pContext;              /* User Context for the program */
+    struct Kernel_Thread* pThreadPtr = NULL;   /* New Kernel Thread */
+    
+    /* Load program onto buffer */
+    if(Read_Fully(program, (void**) &pData, &pLen) != 0) return ENOTFOUND;
+
+    /* Parse ELF Executable, filling the internal structure */
+    if(Parse_ELF_Executable(pData, pLen, &pStructure) != 0) return -1;
+
+    /* Create the user context with the loaded program */
+    /* I seriously suspect that "&pContext" is not being passed correctly */
+    if (Load_User_Program(pData, pLen, &pStructure, command, (struct User_Context**) &pContext) != 0) return -1;
+
+    /* Kernel thread with the new context
+     * Since we hate multitasking, "detached" will always be false,
+     * unless we find a good reason to change this
+     * or someone realizes we are doing things the lazy way
+     */
+    pThreadPtr = Start_User_Thread(&pContext, 0==1);
+    if(pThreadPtr != NULL)
+    {
+        *pThread = (void*)pThreadPtr;
+        return 0;
+    }
+    else
+    {
+        return -1;
+    }
 }
 
 /*
@@ -117,6 +148,13 @@ void Switch_To_User_Context(struct Kernel_Thread* kthread, struct Interrupt_Stat
      * the Set_Kernel_Stack_Pointer() and Switch_To_Address_Space()
      * functions.
      */
-    TODO("Switch to a new user address space, if necessary");
+    if(kthread->userContext != NULL)
+    {
+        /* User thread, requires context switching
+         * Probably, we should just run everything on kernel space,
+         * and make our lives easier
+         */
+        TODO("Switch PROPERLY to a new user address space, if necessary, which it is");
+    }
 }
 

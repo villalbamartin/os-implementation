@@ -37,9 +37,42 @@
  * Create a new user context of given size
  */
 
-/* TODO: Implement
 static struct User_Context* Create_User_Context(ulong_t size)
-*/
+{
+	struct User_Context* uContext;
+	ushort_t sel;
+	struct Segment_Descriptor* gdtDesc;
+
+    /* Create a User_Context structure */
+	uContext = Malloc(sizeof(struct User_Context));
+    uContext->memory = Malloc(size);
+    uContext->size = size;
+
+    /* Allocate an LDT descriptor in the GDT */
+    /* BUG: Let's free some memory in case of error*/
+    gdtDesc = Allocate_Segment_Descriptor();
+    uContext->ldtDescriptor =
+
+    /* Initialize the LDT in the GDT */
+    /* BUG: This is likely wrong */
+    Init_LDT_Descriptor(uContext->ldtDescriptor,uContext->ldt,NUM_USER_LDT_ENTRIES);
+
+    /* Create a selector */
+    /* BUG: no se que va en el tercer parámetro */
+    sel = Selector(USER_PRIVILEGE, 1==0, 0);
+
+    /* Initialize the descriptors in LDT */
+    /* BUG: probably too much memory being allocated */
+    Init_Code_Segment_Descriptor(uContext->ldtDescriptor, 0, size/PAGE_SIZE, USER_PRIVILEGE);
+    Init_Data_Segment_Descriptor(uContext->ldtDescriptor, 0, size/PAGE_SIZE, USER_PRIVILEGE);
+
+    /* BUG: I don't know where to start... */
+    //uContext->ldtDescriptor[0] = Selector(USER_PRIVILEGE, 1==0, 0);
+    //uContext->ldtDescriptor[1] = Selector(USER_PRIVILEGE, 1==0, 1);
+
+    TODO("Create_User_Context: This function is not complete yet");
+	return uContext;
+}
 
 
 static bool Validate_User_Memory(struct User_Context* userContext,
@@ -109,7 +142,62 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
      *   address, argument block address, and initial kernel stack pointer
      *   address
      */
-    TODO("Load a user executable into a user memory space using segmentation");
+
+    /* If I've ever written something likely to have off-by-1 errors, this is it */
+
+    ulong_t reqMem = 0;  /* Required memory */
+    ulong_t stackEntry = 0;  /* Required memory */
+    int i=0;              /* Tradition dictates this should be a char! */
+    struct User_Context *uCont;
+    unsigned int numargs = 0;
+    ulong_t argBSize = 0;
+    struct Argument_Block *argBlock;
+
+    /* First, let's parse the arguments */
+    Get_Argument_Block_Size(command, &numargs, &argBSize);
+
+    /* Now, lets calculate how much memory we should allocate */
+    /* If I'm not mistaken, the largest virtual address shouldn't be
+     * larger than max(base_address)+size
+     * This code handles the superposition of both segments
+     */
+    reqMem = 0;
+    for(i=0; i< exeFormat->numSegments; i++)
+    {
+        if(exeFormat->segmentList[i].startAddress + exeFormat->segmentList[i].sizeInMemory > reqMem)
+        {
+            reqMem = exeFormat->segmentList[i].startAddress + exeFormat->segmentList[i].sizeInMemory;
+        }
+    }
+
+    /* I'll need stackEntry later */
+    stackEntry = reqMem = Round_Up_To_Page(reqMem);
+    reqMem += Round_Up_To_Page(DEFAULT_USER_STACK_SIZE + argBSize);
+
+    /* We can now create our User Context structure */
+    uCont = Create_User_Context(reqMem);
+    uCont->entryAddr = exeFormat->entryAddr;
+    uCont->refCount=0;
+
+    /* Let's copy now to memory the segments */
+    memcpy( (void*) uCont->memory+exeFormat->segmentList[0].startAddress,
+            (void *) exeFileData + exeFormat->segmentList[0].offsetInFile,
+            exeFormat->segmentList[0].lengthInFile);
+    memcpy( (void*) uCont->memory+exeFormat->segmentList[1].startAddress,
+            (void *) exeFileData + exeFormat->segmentList[1].offsetInFile,
+            exeFormat->segmentList[1].lengthInFile);
+
+    /* And now, we copy the the argument block */
+    argBlock = (struct Argument_Block *)Malloc(argBSize);
+    Format_Argument_Block((char*) argBlock, numargs, reqMem - argBSize, command);
+    memcpy( (void*) uCont->memory+reqMem - argBSize, (void *) argBlock, argBSize);
+
+    /* Let's fill the remaining fields in the User Context */
+    uCont->argBlockAddr = reqMem - argBSize;
+    /* I calculated this earlier */
+    uCont->stackPointerAddr = stackEntry;
+
+    return 0;
 }
 
 /*
