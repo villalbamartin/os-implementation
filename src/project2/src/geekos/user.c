@@ -63,7 +63,6 @@ void Detach_User_Context(struct Kernel_Thread* kthread)
 	refCount = old->refCount;
 	Enable_Interrupts();
 
-	/*Print("User context refcount == %d\n", refCount);*/
         if (refCount == 0)
             Destroy_User_Context(old);
     }
@@ -99,45 +98,74 @@ int Spawn(const char *program, const char *command, struct Kernel_Thread **pThre
      * pThread and return 0.  Otherwise, return an error code.
      */
 
+    int retval = -1;                           /* Return value */
     char* pData = NULL;                        /* Program data */
     ulong_t pLen = 0;                          /* Program length */
-    struct Exe_Format pStructure;              /* Structure to store the program */
-    struct User_Context* pContext;              /* User Context for the program */
+    struct Exe_Format* pStructure=NULL;        /* Structure to store the program */
+    struct User_Context* pContext=NULL;        /* User Context for the program */
     struct Kernel_Thread* pThreadPtr = NULL;   /* New Kernel Thread */
 
-    //Print("Entering Spawn\n");
-    pContext= (struct User_Context*)Malloc(sizeof(struct User_Context));
-
-    /* Load program onto buffer */
-    if(Read_Fully(program, (void**) &pData, &pLen) != 0) return ENOTFOUND;
-
-    /* Parse ELF Executable, filling the internal structure */
-    if(Parse_ELF_Executable(pData, pLen, &pStructure) != 0) return -1;
-
-    /* Create the user context with the loaded program */
-    /* I seriously suspect that "&pContext" is not being passed correctly */
-    if (Load_User_Program(pData, pLen, &pStructure, command, (struct User_Context**) pContext) != 0) return -1;
-
-    /* Kernel thread with the new context
-     * Since we hate multitasking, "detached" will always be false,
-     * unless we find a good reason to change this
-     * or someone realizes we are doing things the lazy way
-     */
-
-    pThreadPtr = Start_User_Thread(pContext, 0==1);
-
-    //Print("Leaving Spawn\n");
-    if(pThreadPtr != NULL)
+    pContext=(struct User_Context*)Malloc(sizeof(struct User_Context));
+    pStructure=(struct Exe_Format*)Malloc(sizeof(struct Exe_Format));
+    if(pContext != NULL && pStructure != NULL)
     {
-        // It said (void*)pThreadPtr;
-        *pThread = pThreadPtr;
-        return pThreadPtr->pid;
+        /* Load program onto buffer */
+        if(Read_Fully(program, (void**) &pData, &pLen) == 0)
+        {
+            /* Parse ELF Executable, filling the internal structure */
+            if(Parse_ELF_Executable(pData, pLen, pStructure) == 0)
+            {
+                /* Create the user context with the loaded program */
+                if (Load_User_Program(pData, pLen, pStructure, command, (struct User_Context**) pContext) == 0)
+                {
+                    /* Kernel thread with the new context
+                     * Since we hate multitasking, "detached" will always be false,
+                     * unless we find a good reason to change this
+                     * or someone realizes we are doing things the lazy way
+                     */
+                    pThreadPtr = Start_User_Thread(pContext, 0==1);
+                    if(pThreadPtr != NULL)
+                    {
+                        // Let's return the thread as it should be
+                        *pThread = pThreadPtr;
+                        retval = pThreadPtr->pid;
+                    }
+                    else
+                    {
+                        Free(pStructure);
+                        Free(pData);
+                        Free(pContext);
+                    }
+                }
+                else
+                {
+                    Free(pData);
+                    Free(pStructure);
+                    Free(pContext);
+                }
+            }
+            else
+            {
+                Free(pData);
+                Free(pStructure);
+                Free(pContext);
+            }
+        }
+        else
+        {
+            /* This is the only special error,
+             * the "File Not Found" error */
+            retval = ENOTFOUND;
+            Free(pStructure);
+            Free(pContext);
+        }
     }
     else
     {
-        /* BUG: ignores ENOTFOUND */
-        return -1;
+        Free(pContext);
+        Free(pStructure);
     }
+    return retval;
 }
 
 /*
@@ -164,8 +192,8 @@ void Switch_To_User_Context(struct Kernel_Thread* kthread, struct Interrupt_Stat
          */
         //TODO("Switch PROPERLY to a new user address space, if necessary, which it is");
 
-        Switch_To_Address_Space(kthread->userContext);
         Set_Kernel_Stack_Pointer(((ulong_t) kthread->stackPage) + PAGE_SIZE);
+        Switch_To_Address_Space(kthread->userContext);
     }
 }
 

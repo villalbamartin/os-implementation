@@ -80,8 +80,6 @@ void Main(struct Boot_Info* bootInfo)
     Set_Current_Attr(ATTRIB(BLACK, GRAY));
 
 
-
-
     Spawn_Init_Process();
 
     /* Now this thread is done. */
@@ -105,10 +103,9 @@ static void Mount_Root_Filesystem(void)
 static void Spawn_Init_Process(void)
 {
 	int pid = 0;
-	struct Kernel_Thread nThread;
-    /* TODO("Spawn the init process"); */
-	Print("Entering Spawn_Init_Process\n");
-    pid = Spawn(INIT_PROGRAM, INIT_PROGRAM, (struct Kernel_Thread**) &nThread);
+	struct Kernel_Thread *nThread = NULL;
+
+	pid = Spawn(INIT_PROGRAM, INIT_PROGRAM, &nThread);
 
     if(pid <= 0)
     {

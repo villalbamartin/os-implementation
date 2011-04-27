@@ -39,44 +39,52 @@
 
 static struct User_Context* Create_User_Context(ulong_t size)
 {
-	struct User_Context* uContext;
-	//ushort_t sel;
-	struct Segment_Descriptor* gdtDesc;
+	struct User_Context* uContext = NULL;
 
-	Print("Entering Create_User_Context - check for memset\n");
     /* Create a User_Context structure */
 	uContext = Malloc(sizeof(struct User_Context));
-    uContext->memory = Malloc(size);
-    memset((char*) uContext->memory, '\0', size);
-    uContext->size = size;
-    Print("survived memset\n");
+	if(uContext!=NULL)
+	{
+	    uContext->memory = Malloc(sizeof(char)*size);
+        if(uContext->memory!=NULL)
+        {
+            memset((char*) uContext->memory, '\0', size);
+            uContext->size = size;
 
+            /* Allocate an LDT descriptor in the GDT,
+             * and initialize the LDT in the GDT
+             * The first argument is right, just trust me,
+             * the second one is the only one that makes sense
+             */
+            uContext->ldtDescriptor = Allocate_Segment_Descriptor();
+            if(uContext->ldtDescriptor != NULL)
+            {
+                Init_LDT_Descriptor(uContext->ldtDescriptor,uContext->ldt,NUM_USER_LDT_ENTRIES);
 
-    /* Allocate an LDT descriptor in the GDT */
-    /* BUG: Let's free some memory in case of error*/
-    gdtDesc = Allocate_Segment_Descriptor();
+                /* Create a selector, don't really know why */
+                uContext->ldtSelector = Selector(KERNEL_PRIVILEGE, 1==1, Get_Descriptor_Index(uContext->ldtDescriptor));
 
-    /* Initialize the LDT in the GDT
-     * The first argument is right, just trust me,
-     * the second one is the only one that makes sense
-     */
-    uContext->ldtDescriptor = Allocate_Segment_Descriptor();
-    Init_LDT_Descriptor(uContext->ldtDescriptor,uContext->ldt,NUM_USER_LDT_ENTRIES);
+                /* Initialize the descriptors in LDT */
+                Init_Code_Segment_Descriptor(&uContext->ldtDescriptor[0], (unsigned long) uContext->memory, (size/PAGE_SIZE)+10, USER_PRIVILEGE);
+                Init_Data_Segment_Descriptor(&uContext->ldtDescriptor[1], (unsigned long) uContext->memory, (size/PAGE_SIZE)+10, USER_PRIVILEGE);
 
-    /* Create a selector, don't really know why */
-    uContext->ldtSelector = Selector(KERNEL_PRIVILEGE, 1==1, Get_Descriptor_Index(uContext->ldtDescriptor));
-
-    /* Initialize the descriptors in LDT */
-    /* BUG: probably too much memory being allocated */
-    /* Also, I can't explain correctly the 2nd parameter */
-    Init_Code_Segment_Descriptor(&uContext->ldtDescriptor[0], (unsigned long) uContext->memory, (size/PAGE_SIZE)+10, USER_PRIVILEGE);
-    Init_Data_Segment_Descriptor(&uContext->ldtDescriptor[1], (unsigned long) uContext->memory, (size/PAGE_SIZE)+10, USER_PRIVILEGE);
-
-    /* Create remaining selectors, inside the LDT */
-    uContext->csSelector = Selector(USER_PRIVILEGE, 1==0, 0);
-    uContext->dsSelector = Selector(USER_PRIVILEGE, 1==0, 1);
-
-    Print("Leaving Create_User_Context\n");
+                /* Create remaining selectors, inside the LDT */
+                uContext->csSelector = Selector(USER_PRIVILEGE, 1==0, 0);
+                uContext->dsSelector = Selector(USER_PRIVILEGE, 1==0, 1);
+            }
+            else
+            {
+                Free(uContext->memory);
+                Free(uContext);
+                uContext = NULL;
+            }
+        }
+        else
+        {
+            Free(uContext);
+            uContext = NULL;
+        }
+	}
     return uContext;
 }
 
@@ -150,14 +158,17 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
      */
 
     /* If I've ever written something likely to have off-by-1 errors, this is it */
+    int i=0;                         /* Tradition dictates this should be a char! */
+    int retval=0;                    /* Return value */
 
-    ulong_t reqMem = 0;  /* Required memory */
-    ulong_t stackBegin = 0; /* Beginning of stack and argument block */
-    int i=0;              /* Tradition dictates this should be a char! */
-    struct User_Context *uCont;
-    unsigned int numargs = 0;
-    ulong_t argBSize = 0;
-    struct Argument_Block *argBlock;
+    struct User_Context *uCont=NULL; /* User context */
+    ulong_t reqMem = 0;              /* Required memory */
+    ulong_t stackBegin = 0;          /* Beginning of stack (and argument block) */
+
+    struct Argument_Block *argBlock=NULL; /* Temporary argument block */
+    ulong_t argBSize = 0;                 /* Size of argument block */
+    unsigned int numargs = 0;             /* Number of arguments in argument block */
+
 
     /* First, let's parse the arguments */
     Get_Argument_Block_Size(command, &numargs, &argBSize);
@@ -176,35 +187,47 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
         }
     }
 
-    /* I'll need stackEntry later */
+    /* Keep a record of memory sizes and locations */
     stackBegin = Round_Up_To_Page(reqMem)+ Round_Up_To_Page(DEFAULT_USER_STACK_SIZE);
-    reqMem = Round_Up_To_Page(reqMem) + Round_Up_To_Page(DEFAULT_USER_STACK_SIZE + argBSize);
-
+    reqMem = stackBegin + Round_Up_To_Page(argBSize);
 
     /* We can now create our User Context structure */
     uCont = Create_User_Context(reqMem);
-    uCont->entryAddr = exeFormat->entryAddr;
-    uCont->refCount=0;
+    if(uCont!=NULL)
+    {
+        uCont->entryAddr = exeFormat->entryAddr;
+        uCont->refCount=0;
 
-    /* Let's copy now to memory the segments */
-    memcpy( (void*) uCont->memory+exeFormat->segmentList[0].startAddress,
-            (void *) exeFileData + exeFormat->segmentList[0].offsetInFile,
-            exeFormat->segmentList[0].lengthInFile);
-    memcpy( (void*) uCont->memory+exeFormat->segmentList[1].startAddress,
-            (void *) exeFileData + exeFormat->segmentList[1].offsetInFile,
-            exeFormat->segmentList[1].lengthInFile);
+        /* Let's copy now to memory the segments */
+        memcpy( (void*) uCont->memory+exeFormat->segmentList[0].startAddress,
+                (void *) exeFileData + exeFormat->segmentList[0].offsetInFile,
+                exeFormat->segmentList[0].lengthInFile);
+        memcpy( (void*) uCont->memory+exeFormat->segmentList[1].startAddress,
+                (void *) exeFileData + exeFormat->segmentList[1].offsetInFile,
+                exeFormat->segmentList[1].lengthInFile);
 
-    /* And now, we copy the the argument block */
-    argBlock = (struct Argument_Block *)Malloc(argBSize);
-    Format_Argument_Block((char*) argBlock, numargs, reqMem - argBSize, command);
-    memcpy( (void*) uCont->memory+reqMem - argBSize, (void *) argBlock, argBSize);
+        /* And now, we copy the the argument block */
+        argBlock = (struct Argument_Block *)Malloc(argBSize);
+        if(argBlock!=NULL)
+        {
+            Format_Argument_Block((char*) argBlock, numargs, reqMem - argBSize, command);
+            memcpy( (void*) uCont->memory+stackBegin, (void *) argBlock, argBSize);
 
-    /* Let's fill the remaining fields in the User Context */
-    uCont->argBlockAddr = stackBegin;
-    uCont->stackPointerAddr = stackBegin;
-
-   //Print("DEBUG Leaving Load_User_Program\n");
-    return 0;
+            /* Let's fill the remaining fields in the User Context */
+            uCont->argBlockAddr = stackBegin;
+            uCont->stackPointerAddr = stackBegin;
+        }
+        else
+        {
+            Free(uCont);
+            retval = -1;
+        }
+    }
+    else
+    {
+        retval = -1;
+    }
+    return retval;
 }
 
 /*

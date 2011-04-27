@@ -183,6 +183,7 @@ static void Destroy_Thread(struct Kernel_Thread* kthread)
 static void Reap_Thread(struct Kernel_Thread* kthread)
 {
     KASSERT(!Interrupts_Enabled());
+
     Enqueue_Thread(&s_graveyardQueue, kthread);
     Wake_Up(&s_reaperWaitQueue);
 }
@@ -320,51 +321,50 @@ static void Setup_Kernel_Thread(
      * - The esi register should contain the address of
      *   the argument block
      */
+    if(kthread != NULL && userContext != NULL)
+    {
+        /* If the hint says so... let's attach the user context to the thread*/
+        Attach_User_Context(kthread, userContext);
 
-    /* If the hint says so... let's attach the user context to the thread*/
-    Attach_User_Context(kthread, userContext);
+        /* Let's set the stack now*/
+        /* Data selector */
+        Push(kthread, userContext->dsSelector);
 
-    /* Let's set the stack now*/
-    /* Data selector */
-    Push(kthread, userContext->dsSelector);
+        /* Stack Pointer
+         * BUG: Not sure
+         */
+        Push(kthread, userContext->stackPointerAddr);
 
-    /* Stack Pointer
-     * BUG: Not sure
-     */
-    Push(kthread, userContext->stackPointerAddr);
+        /* EFlAGS
+         * Notar que es copy-paste, así que hay que revisar
+         */
+        Push(kthread, 0UL);
 
-    /* EFlAGS
-     * Notar que es copy-paste, así que hay que revisar
-     */
-    Push(kthread, 0UL);
+        /* Text Selector */
+        Push(kthread, userContext->csSelector);
 
-    /* Text Selector */
-    Push(kthread, userContext->csSelector);
+        /* EIP */
+        Push(kthread, userContext->entryAddr);
 
-    /* EIP */
-    Push(kthread, userContext->entryAddr);
+        /* Push fake error code and interrupt number. */
+        Push(kthread, 0);
+        Push(kthread, 0);
 
-    /* Push fake error code and interrupt number. */
-    Push(kthread, 0);
-    Push(kthread, 0);
+        /* Push initial values for general-purpose registers. */
+        Push(kthread, 0);  /* eax */
+        Push(kthread, 0);  /* ebx */
+        Push(kthread, 0);  /* ecx */
+        Push(kthread, 0);  /* edx */
+        Push(kthread, userContext->argBlockAddr);  /* esi */
+        Push(kthread, 0);  /* edi */
+        Push(kthread, 0);  /* ebp */
 
-    /* Push initial values for general-purpose registers. */
-    Push(kthread, 0);  /* eax */
-    Push(kthread, 0);  /* ebx */
-    Push(kthread, 0);  /* ecx */
-    Push(kthread, 0);  /* edx */
-    Push(kthread, userContext->argBlockAddr);  /* esi */
-    Push(kthread, 0);  /* edi */
-    Push(kthread, 0);  /* ebp */
-
-    /* Selectors */
-
-    Push(kthread, userContext->dsSelector);  /* ds - BUG: FIX THIS!*/
-    Push(kthread, userContext->csSelector);  /* es - BUG: FIX THIS!*/
-    Push(kthread, 0);  /* fs */
-    Push(kthread, 0);  /* gs */
-
-    //Print("DEBUG: Leaving Setup_User_Thread\n");
+        /* Selectors */
+        Push(kthread, userContext->dsSelector);  /* ds */
+        Push(kthread, userContext->dsSelector);  /* es */
+        Push(kthread, userContext->dsSelector);  /* fs */
+        Push(kthread, userContext->dsSelector);  /* gs */
+    }
 }
 
 
@@ -566,25 +566,19 @@ Start_User_Thread(struct User_Context* userContext, bool detached)
      * - Call Make_Runnable_Atomic() to schedule the process
      *   for execution
      */
-    struct Kernel_Thread* uThread;
+    struct Kernel_Thread* uThread = NULL;
 
-    //Print("DEBUG: Entering Start_User_Thread\n");
     /* Create a thread and setup it */
+    uThread = Create_Thread(PRIORITY_USER, detached);
+    if(uThread != NULL)
+    {
+        Setup_User_Thread(uThread, userContext);
 
-    /* Create_Thread llama a Init_Thread,
-     * Init_Thread cambia refcount a 1 o 2,
-     * y esto hace saltar una aserción en Attach_User_Context(),
-     * que es llamado en Setup_User_Thread
-     */
-    uThread = Create_Thread(0, detached);
-    Setup_User_Thread(uThread, userContext);
-
-    /* Now that Setup_User_Thread has pushed everything into the stack,
-     * I can make this thread runnable
-     */
-    Make_Runnable_Atomic(uThread);
-
-    //Print("DEBUG: Leaving Start_User_Thread\n");
+        /* Now that Setup_User_Thread has pushed everything into the stack,
+         * I can make this thread runnable
+         */
+        Make_Runnable_Atomic(uThread);
+    }
     return uThread;
 }
 
@@ -647,7 +641,6 @@ struct Kernel_Thread* Get_Next_Runnable(void)
 void Schedule(void)
 {
     struct Kernel_Thread* runnable;
-
     /* Make sure interrupts really are disabled */
     KASSERT(!Interrupts_Enabled());
 
