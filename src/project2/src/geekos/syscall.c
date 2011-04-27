@@ -33,6 +33,7 @@
  */
 static int Sys_Null(struct Interrupt_State* state)
 {
+    Print("Null syscall\n");
     return 0;
 }
 

@@ -116,6 +116,6 @@ static void Spawn_Init_Process(void)
     }
     else
     {
-    	Print("Program successfully started");
+    	Print("Program successfully started (%i)\n", pid);
     }
 }

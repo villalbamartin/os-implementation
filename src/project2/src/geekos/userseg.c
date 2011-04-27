@@ -40,14 +40,17 @@
 static struct User_Context* Create_User_Context(ulong_t size)
 {
 	struct User_Context* uContext;
-	ushort_t sel;
+	//ushort_t sel;
 	struct Segment_Descriptor* gdtDesc;
 
-	Print("Entering Create_User_Context\n");
+	Print("Entering Create_User_Context - check for memset\n");
     /* Create a User_Context structure */
 	uContext = Malloc(sizeof(struct User_Context));
     uContext->memory = Malloc(size);
+    memset((char*) uContext->memory, '\0', size);
     uContext->size = size;
+    Print("survived memset\n");
+
 
     /* Allocate an LDT descriptor in the GDT */
     /* BUG: Let's free some memory in case of error*/
@@ -57,24 +60,21 @@ static struct User_Context* Create_User_Context(ulong_t size)
      * The first argument is right, just trust me,
      * the second one is the only one that makes sense
      */
-    Init_LDT_Descriptor(gdtDesc,uContext->ldt,NUM_USER_LDT_ENTRIES);
+    uContext->ldtDescriptor = Allocate_Segment_Descriptor();
+    Init_LDT_Descriptor(uContext->ldtDescriptor,uContext->ldt,NUM_USER_LDT_ENTRIES);
 
-    /* Create a selector */
-    sel = Selector(USER_PRIVILEGE, 1==1, uContext->ldtSelector);
+    /* Create a selector, don't really know why */
+    uContext->ldtSelector = Selector(KERNEL_PRIVILEGE, 1==1, Get_Descriptor_Index(uContext->ldtDescriptor));
 
     /* Initialize the descriptors in LDT */
     /* BUG: probably too much memory being allocated */
     /* Also, I can't explain correctly the 2nd parameter */
-    Init_Code_Segment_Descriptor(&uContext->ldtDescriptor[0], (unsigned long) uContext->memory, size/PAGE_SIZE, USER_PRIVILEGE);
-    Init_Data_Segment_Descriptor(&uContext->ldtDescriptor[1], (unsigned long) uContext->memory, size/PAGE_SIZE, USER_PRIVILEGE);
-
+    Init_Code_Segment_Descriptor(&uContext->ldtDescriptor[0], (unsigned long) uContext->memory, (size/PAGE_SIZE)+10, USER_PRIVILEGE);
+    Init_Data_Segment_Descriptor(&uContext->ldtDescriptor[1], (unsigned long) uContext->memory, (size/PAGE_SIZE)+10, USER_PRIVILEGE);
 
     /* Create remaining selectors, inside the LDT */
-    uContext->csSelector = Selector(USER_PRIVILEGE, 1==0, Get_Descriptor_Index(&uContext->ldtDescriptor[0]));
-    uContext->dsSelector = Selector(USER_PRIVILEGE, 1==0, Get_Descriptor_Index(&uContext->ldtDescriptor[1]));
-
-    /* I guess this should be here */
-    uContext->ldtDescriptor = gdtDesc;
+    uContext->csSelector = Selector(USER_PRIVILEGE, 1==0, 0);
+    uContext->dsSelector = Selector(USER_PRIVILEGE, 1==0, 1);
 
     Print("Leaving Create_User_Context\n");
     return uContext;
@@ -152,14 +152,13 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
     /* If I've ever written something likely to have off-by-1 errors, this is it */
 
     ulong_t reqMem = 0;  /* Required memory */
-    ulong_t stackEntry = 0;  /* Required memory */
+    ulong_t stackBegin = 0; /* Beginning of stack and argument block */
     int i=0;              /* Tradition dictates this should be a char! */
     struct User_Context *uCont;
     unsigned int numargs = 0;
     ulong_t argBSize = 0;
     struct Argument_Block *argBlock;
 
-    Print("Entering Load_User_Program\n");
     /* First, let's parse the arguments */
     Get_Argument_Block_Size(command, &numargs, &argBSize);
 
@@ -178,8 +177,9 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
     }
 
     /* I'll need stackEntry later */
-    stackEntry = reqMem = Round_Up_To_Page(reqMem);
-    reqMem += Round_Up_To_Page(DEFAULT_USER_STACK_SIZE + argBSize);
+    stackBegin = Round_Up_To_Page(reqMem)+ Round_Up_To_Page(DEFAULT_USER_STACK_SIZE);
+    reqMem = Round_Up_To_Page(reqMem) + Round_Up_To_Page(DEFAULT_USER_STACK_SIZE + argBSize);
+
 
     /* We can now create our User Context structure */
     uCont = Create_User_Context(reqMem);
@@ -200,11 +200,10 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
     memcpy( (void*) uCont->memory+reqMem - argBSize, (void *) argBlock, argBSize);
 
     /* Let's fill the remaining fields in the User Context */
-    uCont->argBlockAddr = reqMem - argBSize;
-    /* I calculated this earlier */
-    uCont->stackPointerAddr = stackEntry;
+    uCont->argBlockAddr = stackBegin;
+    uCont->stackPointerAddr = stackBegin;
 
-    Print("Leaving Load_User_Program\n");
+   //Print("DEBUG Leaving Load_User_Program\n");
     return 0;
 }
 
@@ -267,6 +266,8 @@ void Switch_To_Address_Space(struct User_Context *userContext)
      * Hint: you will need to use the lldt assembly language instruction
      * to load the process's LDT by specifying its LDT selector.
      */
-    TODO("Switch to user address space using segmentation/LDT");
+
+    /* They said this is the way, so who am I to argue? */
+    __asm__ __volatile__ ("lldt %0" :: "a" (userContext->ldtSelector));
 }
 

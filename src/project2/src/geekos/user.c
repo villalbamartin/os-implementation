@@ -105,7 +105,7 @@ int Spawn(const char *program, const char *command, struct Kernel_Thread **pThre
     struct User_Context* pContext;              /* User Context for the program */
     struct Kernel_Thread* pThreadPtr = NULL;   /* New Kernel Thread */
 
-    Print("Entering Spawn\n");
+    //Print("Entering Spawn\n");
     pContext= (struct User_Context*)Malloc(sizeof(struct User_Context));
 
     /* Load program onto buffer */
@@ -126,10 +126,11 @@ int Spawn(const char *program, const char *command, struct Kernel_Thread **pThre
 
     pThreadPtr = Start_User_Thread(pContext, 0==1);
 
-    Print("Leaving Setup_User_Thread\n");
+    //Print("Leaving Spawn\n");
     if(pThreadPtr != NULL)
     {
-        *pThread = (void*)pThreadPtr;
+        // It said (void*)pThreadPtr;
+        *pThread = pThreadPtr;
         return pThreadPtr->pid;
     }
     else
@@ -161,7 +162,10 @@ void Switch_To_User_Context(struct Kernel_Thread* kthread, struct Interrupt_Stat
          * Probably, we should just run everything on kernel space,
          * and make our lives easier
          */
-        TODO("Switch PROPERLY to a new user address space, if necessary, which it is");
+        //TODO("Switch PROPERLY to a new user address space, if necessary, which it is");
+
+        Switch_To_Address_Space(kthread->userContext);
+        Set_Kernel_Stack_Pointer(((ulong_t) kthread->stackPage) + PAGE_SIZE);
     }
 }
 
