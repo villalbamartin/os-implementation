@@ -338,7 +338,7 @@ static void Setup_Kernel_Thread(
         /* EFlAGS
          * Notar que es copy-paste, así que hay que revisar
          */
-        Push(kthread, 0UL);
+        Push(kthread, 0UL); /*EFLAGS_IF*/
 
         /* Text Selector */
         Push(kthread, userContext->csSelector);
@@ -565,6 +565,10 @@ Start_User_Thread(struct User_Context* userContext, bool detached)
      *   execute in user mode
      * - Call Make_Runnable_Atomic() to schedule the process
      *   for execution
+     */
+
+    /* Chequear detached para la shell, si está en detached
+     * no lanza procesos, o algo así
      */
     struct Kernel_Thread* uThread = NULL;
 

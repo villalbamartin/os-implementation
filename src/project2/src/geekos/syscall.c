@@ -47,7 +47,10 @@ static int Sys_Null(struct Interrupt_State* state)
  */
 static int Sys_Exit(struct Interrupt_State* state)
 {
-    TODO("Exit system call");
+    /* TODO: g_currentThread tiene el thread actual,
+     * quizás deba usarlo
+     */
+    Exit((int)state->ebx);
     return 0;
 }
 
@@ -60,8 +63,19 @@ static int Sys_Exit(struct Interrupt_State* state)
  */
 static int Sys_PrintString(struct Interrupt_State* state)
 {
-    TODO("PrintString system call");
-    return 0;
+    /*char* message = NULL;
+    int retval = -1;
+
+    message = (char*)Malloc(state->ecx+1);
+    if(message!=NULL)
+    {
+        memcpy(message, (char*)state->ebx, state->ecx);
+        message[state->ecx] = '\0';
+        Print("%s", (char*)state->ecx);
+        retval=0;
+    }
+    return retval;*/
+    return -1;
 }
 
 /*
@@ -73,8 +87,12 @@ static int Sys_PrintString(struct Interrupt_State* state)
  */
 static int Sys_GetKey(struct Interrupt_State* state)
 {
-    TODO("GetKey system call");
-    return 0;
+    Keycode key=0;
+    do
+    {
+        key=Wait_For_Key();
+    } while((key & KEY_RELEASE_FLAG)!=0);
+    return (int)(key & 0x00ff);
 }
 
 /*

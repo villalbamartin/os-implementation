@@ -195,9 +195,6 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
     uCont = Create_User_Context(reqMem);
     if(uCont!=NULL)
     {
-        uCont->entryAddr = exeFormat->entryAddr;
-        uCont->refCount=0;
-
         /* Let's copy now to memory the segments */
         memcpy( (void*) uCont->memory+exeFormat->segmentList[0].startAddress,
                 (void *) exeFileData + exeFormat->segmentList[0].offsetInFile,
@@ -214,8 +211,10 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
             memcpy( (void*) uCont->memory+stackBegin, (void *) argBlock, argBSize);
 
             /* Let's fill the remaining fields in the User Context */
+            uCont->entryAddr = exeFormat->entryAddr;
             uCont->argBlockAddr = stackBegin;
-            uCont->stackPointerAddr = stackBegin;
+            uCont->stackPointerAddr = stackBegin-1; //-1?
+            uCont->refCount=0;
         }
         else
         {
