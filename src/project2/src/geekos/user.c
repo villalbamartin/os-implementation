@@ -63,6 +63,7 @@ void Detach_User_Context(struct Kernel_Thread* kthread)
 	refCount = old->refCount;
 	Enable_Interrupts();
 
+	/*Print("User context refcount == %d\n", refCount);*/
         if (refCount == 0)
             Destroy_User_Context(old);
     }
@@ -97,75 +98,50 @@ int Spawn(const char *program, const char *command, struct Kernel_Thread **pThre
      * If all goes well, store the pointer to the new thread in
      * pThread and return 0.  Otherwise, return an error code.
      */
+    /* Por Victor Rosales */
+    char *exeFileData = 0;
+    ulong_t exeFileLength = 0;
+    struct Exe_Format exeFormat;
+    struct User_Context *userContext = NULL;
+    struct Kernel_Thread *process = NULL;
+    int ret = 0;
 
-    int retval = -1;                           /* Return value */
-    char* pData = NULL;                        /* Program data */
-    ulong_t pLen = 0;                          /* Program length */
-    struct Exe_Format* pStructure=NULL;        /* Structure to store the program */
-    struct User_Context* pContext=NULL;        /* User Context for the program */
-    struct Kernel_Thread* pThreadPtr = NULL;   /* New Kernel Thread */
+    ret = Read_Fully(program, (void**) &exeFileData, &exeFileLength);
+    if (ret != 0) {
+        ret = ENOTFOUND;
+        goto error;
+    }
 
-    pContext=(struct User_Context*)Malloc(sizeof(struct User_Context));
-    pStructure=(struct Exe_Format*)Malloc(sizeof(struct Exe_Format));
-    if(pContext != NULL && pStructure != NULL)
-    {
-        /* Load program onto buffer */
-        if(Read_Fully(program, (void**) &pData, &pLen) == 0)
-        {
-            /* Parse ELF Executable, filling the internal structure */
-            if(Parse_ELF_Executable(pData, pLen, pStructure) == 0)
-            {
-                /* Create the user context with the loaded program */
-                if (Load_User_Program(pData, pLen, pStructure, command, (struct User_Context**) pContext) == 0)
-                {
-                    /* Kernel thread with the new context
-                     * Since we hate multitasking, "detached" will always be false,
-                     * unless we find a good reason to change this
-                     * or someone realizes we are doing things the lazy way
-                     */
-                    pThreadPtr = Start_User_Thread(pContext, 0==1);
-                    if(pThreadPtr != NULL)
-                    {
-                        // Let's return the thread as it should be
-                        *pThread = pThreadPtr;
-                        retval = pThreadPtr->pid;
-                    }
-                    else
-                    {
-                        Free(pStructure);
-                        Free(pData);
-                        Free(pContext);
-                    }
-                }
-                else
-                {
-                    Free(pData);
-                    Free(pStructure);
-                    Free(pContext);
-                }
-            }
-            else
-            {
-                Free(pData);
-                Free(pStructure);
-                Free(pContext);
-            }
-        }
-        else
-        {
-            /* This is the only special error,
-             * the "File Not Found" error */
-            retval = ENOTFOUND;
-            Free(pStructure);
-            Free(pContext);
-        }
+    ret = Parse_ELF_Executable(exeFileData, exeFileLength, &exeFormat);
+    if (ret != 0) {
+        ret = ENOEXEC;
+        goto error;
     }
-    else
-    {
-        Free(pContext);
-        Free(pStructure);
+
+    ret = Load_User_Program(exeFileData, exeFileLength, &exeFormat,
+                            command, &userContext);
+    if (ret != 0) {
+        ret = -1;
+        goto error;
     }
-    return retval;
+
+    process = Start_User_Thread(userContext, false);
+    if (process == NULL) {
+        ret = -1;
+        goto error;
+    }
+
+    *pThread = process;
+
+    ret =(*pThread)->pid;
+
+error:
+    if (exeFileData)
+        Free(exeFileData);
+
+    exeFileData = 0;
+ 
+    return ret;
 }
 
 /*
@@ -184,14 +160,7 @@ void Switch_To_User_Context(struct Kernel_Thread* kthread, struct Interrupt_Stat
      * the Set_Kernel_Stack_Pointer() and Switch_To_Address_Space()
      * functions.
      */
-    if(kthread->userContext != NULL)
-    {
-        /* User thread, requires context switching
-         * Probably, we should just run everything on kernel space,
-         * and make our lives easier
-         */
-        //TODO("Switch PROPERLY to a new user address space, if necessary, which it is");
-
+    if (kthread->userContext != NULL) {
         Switch_To_Address_Space(kthread->userContext);
         Set_Kernel_Stack_Pointer(((ulong_t) kthread->stackPage) + PAGE_SIZE);
     }
