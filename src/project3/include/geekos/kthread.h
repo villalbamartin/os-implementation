@@ -145,6 +145,12 @@ extern struct Kernel_Thread* g_currentThread;
 extern int g_needReschedule;
 
 /*
+ * Scheduling policy and associated constants
+ */
+#define SCHED_RROBIN 0
+#define SCHED_MLFQ 1
+extern int g_schedPolicy;
+/*
  * Boolean flag indicating that preemption should be disabled.
  */
 extern volatile int g_preemptionDisabled;

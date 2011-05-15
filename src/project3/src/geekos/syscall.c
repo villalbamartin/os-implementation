@@ -247,8 +247,20 @@ static int Sys_GetPID(struct Interrupt_State* state)
  */
 static int Sys_SetSchedulingPolicy(struct Interrupt_State* state)
 {
-    TODO("SetSchedulingPolicy system call");
-    return 0;
+    /* Return value */
+    int retval=-1;
+
+    if(state->ecx >= 2 && state->ecx <= 100 && (state->ebx ==0 || state->ebx==1)){
+        g_Quantum = state->ecx;
+        if(state->ebx == 0) {
+            g_schedPolicy = SCHED_RROBIN;
+        } else {
+            g_schedPolicy = SCHED_MLFQ;
+        }
+        retval = 0;
+    }
+
+    return retval;
 }
 
 /*
@@ -260,8 +272,8 @@ static int Sys_SetSchedulingPolicy(struct Interrupt_State* state)
  */
 static int Sys_GetTimeOfDay(struct Interrupt_State* state)
 {
-    TODO("GetTimeOfDay system call");
-    return 0;
+	/* Trivial */
+    return g_numTicks;
 }
 
 /*

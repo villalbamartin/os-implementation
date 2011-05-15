@@ -93,18 +93,22 @@ static void Timer_Interrupt_Handler(struct Interrupt_State* state)
      * to choose a new thread.
      */
     if (current->numTicks >= g_Quantum) {
-	g_needReschedule = true;
-	/*
-	 * The current process is moved to a lower priority queue,
-	 * since it consumed a full quantum.
-	 */
-        if (current->currentReadyQueue < (MAX_QUEUE_LEVEL - 1)) {
-            /*Print("process %d moved to ready queue %d\n", current->pid, current->currentReadyQueue); */
-            current->currentReadyQueue++;
+        g_needReschedule = true;
+
+        if(g_schedPolicy == SCHED_RROBIN) {
+            /* We emulate Round-Robin by using the last queue as the only existing queue */
+            current->currentReadyQueue = MAX_QUEUE_LEVEL - 1;
+        } else {
+            /*
+             * The current process is moved to a lower priority queue,
+             * since it consumed a full quantum.
+             */
+            if (current->currentReadyQueue < (MAX_QUEUE_LEVEL - 1)) {
+                /*Print("process %d moved to ready queue %d\n", current->pid, current->currentReadyQueue); */
+                current->currentReadyQueue++;
+            }
         }
-
     }
-
 
     End_IRQ(state);
 }

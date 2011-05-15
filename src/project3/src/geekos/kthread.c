@@ -34,16 +34,21 @@ static struct All_Thread_List s_allThreadList;
 static struct Thread_Queue s_runQueue[MAX_QUEUE_LEVEL];
 
 /*
- * Current thread.
+ * Current and Idle thread.
  */
 struct Kernel_Thread* g_currentThread;
-
+struct Kernel_Thread* g_idleThread;
 /*
  * Boolean flag indicating that we need to choose a new runnable thread.
  * It is checked by the interrupt return code (Handle_Interrupt,
  * in lowlevel.asm) before returning from an interrupt.
  */
 int g_needReschedule;
+
+/*
+ * Integer value with the current scheduling policy
+ */
+int g_schedPolicy;
 
 /*
  * Boolean flag indicating that preemption is disabled.
@@ -615,13 +620,23 @@ struct Kernel_Thread* Get_Current(void)
 struct Kernel_Thread* Get_Next_Runnable(void)
 {
     struct Kernel_Thread* best = 0;
-
+    int i=0;
     /* Find the best thread from the highest-priority run queue */
-    TODO("Find a runnable thread from run queues");
+    while(best == 0)
+    {
+        best = Find_Best(&s_runQueue[i]);
+        if(best != 0) {
+            Remove_From_Thread_Queue(&s_runQueue[i],best);
+        }
+        i++;
+        KASSERT(i<MAX_QUEUE_LEVEL);
+    }
+    /*TODO("Find a runnable thread from run queues");*/
 
 /*
  *    Print("Scheduling %x\n", best);
  */
+
     return best;
 }
 
