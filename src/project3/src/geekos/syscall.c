@@ -19,8 +19,9 @@
 #include <geekos/string.h>
 #include <geekos/user.h>
 #include <geekos/timer.h>
-#include <geekos/vfs.h>
 #include <geekos/sem.h>
+#include <geekos/vfs.h>
+
 /*
  * Null system call.
  * Does nothing except immediately return control back

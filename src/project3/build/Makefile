@@ -47,7 +47,7 @@ ALL_TARGETS := fd.img diskc.img
 
 
 # Kernel source file containing implementation of user address space support
-USER_IMP_C := userseg.c
+USER_IMP_C := userseg.c sem.c
 
 # Kernel source files
 KERNEL_C_SRCS := idt.c int.c trap.c irq.c io.c \
