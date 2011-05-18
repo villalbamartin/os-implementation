@@ -100,7 +100,7 @@ static void Timer_Interrupt_Handler(struct Interrupt_State* state)
             current->currentReadyQueue = MAX_QUEUE_LEVEL - 1;
         } else {
             /*
-             * The current process is moved to a lower priority queue,
+             *In MLFQ, the current process is moved to a lower priority queue,
              * since it consumed a full quantum.
              */
             if (current->currentReadyQueue < (MAX_QUEUE_LEVEL - 1)) {

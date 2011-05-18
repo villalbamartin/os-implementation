@@ -429,12 +429,18 @@ static void Reaper(ulong_t arg)
  */
 static __inline__ struct Kernel_Thread* Find_Best(struct Thread_Queue* queue)
 {
-    /* Pick the highest priority thread */
+
     struct Kernel_Thread *kthread = queue->head, *best = 0;
-    while (kthread != 0) {
-	if (best == 0 || kthread->priority > best->priority)
-	    best = kthread;
-	kthread = Get_Next_In_Thread_Queue(kthread);
+    if(g_schedPolicy == SCHED_MLFQ) {
+        /* Pick the highest priority thread in the queue */
+        while (kthread != 0) {
+        if (best == 0 || kthread->priority > best->priority)
+            best = kthread;
+        kthread = Get_Next_In_Thread_Queue(kthread);
+        }
+    } else {
+        /* Just pick the first thread in the queue */
+        best = kthread;
     }
     return best;
 }
