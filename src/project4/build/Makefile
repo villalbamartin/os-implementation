@@ -32,6 +32,8 @@ NON_ELF_SYSTEM     := yes
 EXTRA_CC_USER_OPTS := -Dmain=geekos_main
 endif
 
+EXTRA_C_OPTS=-fno-stack-protector # Otherwise we get an undefined ref in ubuntu
+
 # ----------------------------------------------------------------------
 # Configuration -
 #   Various options specifying how GeekOS should be built,
@@ -60,7 +62,7 @@ KERNEL_C_SRCS := idt.c int.c trap.c irq.c io.c \
 	elf.c blockdev.c ide.c \
 	vfs.c pfat.c bitset.c \
 	paging.c \
-	main.c
+	main.c sem.c
 
 # Kernel object files built from C source files
 KERNEL_C_OBJS := $(KERNEL_C_SRCS:%.c=geekos/%.o)

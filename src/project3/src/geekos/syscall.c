@@ -21,6 +21,7 @@
 #include <geekos/timer.h>
 #include <geekos/sem.h>
 #include <geekos/vfs.h>
+#include <geekos/sem.h>
 
 /*
  * Null system call.
@@ -287,16 +288,27 @@ static int Sys_GetTimeOfDay(struct Interrupt_State* state)
  */
 static int Sys_CreateSemaphore(struct Interrupt_State* state)
 {
-    char semName[SEM_NAME_LENGTH];
+    int result = -1;
+    char name[MAX_SEMAPHORE_NAME+1] = {'\0'};
+    int nameLength = state->ecx;
+    int initCount = state->edx;
 
-    if(state->ecx >= SEM_NAME_LENGTH) {
-        strncpy(semName, (char*)state->ebx, SEM_NAME_LENGTH);
-        semName[SEM_NAME_LENGTH -1] = '\0';
-    } else {
-        strncpy(semName, (char*)state->ebx, state->ecx);
-        semName[state->ecx] = '\0';
+    /* Antes de copiar reviso algunas cosas */
+    if (nameLength<=0 || initCount<0 ||
+        MAX_SEMAPHORE_NAME<nameLength) {
+        return EINVALID;
     }
-    return createSem(semName, state->edx);
+    /* Obtengo el nombre */
+    if (!Copy_From_User(name, state->ebx, nameLength)) {
+        return EINVALID;
+    }
+    if (strnlen(name, MAX_SEMAPHORE_NAME)!=nameLength) {
+        return EINVALID;
+    }
+
+    result = CreateSemaphore(name, nameLength, initCount);
+
+    return result;
 }
 
 /*
@@ -310,8 +322,7 @@ static int Sys_CreateSemaphore(struct Interrupt_State* state)
  */
 static int Sys_P(struct Interrupt_State* state)
 {
-    /*TODO("P (semaphore acquire) system call");*/
-    return PSem(state->ebx);
+    return P(state->ebx);
 }
 
 /*
@@ -323,8 +334,7 @@ static int Sys_P(struct Interrupt_State* state)
  */
 static int Sys_V(struct Interrupt_State* state)
 {
-    /*TODO("V (semaphore release) system call");*/
-    return VSem(state->ebx);
+    return V(state->ebx);
 }
 
 /*
@@ -336,8 +346,7 @@ static int Sys_V(struct Interrupt_State* state)
  */
 static int Sys_DestroySemaphore(struct Interrupt_State* state)
 {
-    /*TODO("DestroySemaphore system call");*/
-    return destroySem(state->ebx);
+    return DestroySemaphore(state->ebx);
 }
 
 
