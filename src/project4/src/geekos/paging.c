@@ -43,7 +43,8 @@ int debugFaults = 0;
 void checkPaging()
 {
   unsigned long reg=0;
-  __asm__ __volatile__( "movl %%cr0, %0" : "=a" (reg));
+  /*__asm__ __volatile__( "movl %%cr0, %0" : "=a" (reg));*/
+  __asm__ __volatile__( "mov %%cr0, %0" : "=a" (reg));
   Print("Paging on ? : %d\n", (reg & (1<<31)) != 0);
 }
 
@@ -121,7 +122,74 @@ void Init_VM(struct Boot_Info *bootInfo)
      * - Do not map a page at address 0; this will help trap
      *   null pointer references
      */
-    TODO("Build initial kernel page directory and page tables");
+    /*TODO("Build initial kernel page directory and page tables");*/
+
+    pde_t* pageDir = NULL;
+    pde_t tmpPDEntry;
+    pte_t* pageTable = NULL;
+    /*pte_t* tmpPTEntry = NULL;
+     * From here on, this variables are probably wrong*/
+    uint_t tmpPTEntry;
+    pte_t* tmpPTEntry2;
+
+    struct Page* tmpPage = NULL;
+    int i = 0;
+    ulong_t addr;
+
+    /* First, we create a page directory */
+    pageDir = (pde_t*)Alloc_Page();
+    memset(pageDir, '\0', PAGE_SIZE);
+
+    /* Now, let's create the page tables
+     * Each table covers 1024 pointers = 1024 pages = 4 MB.
+     * Since PAGE_SIZE is defined in bytes, I'll do:
+     * (Mem in bytes) / (Number of pointers * covered memory)
+     */
+    for(i=0; i<bootInfo->memSizeKB*1024 / (((PAGE_SIZE)/sizeof(int))*PAGE_SIZE) ; i++)
+    {
+        /* Let's allocate a page for each Page Table */
+        pageTable = (pte_t*)Alloc_Page();
+        memset(pageTable, '\0', PAGE_SIZE);
+
+        /* And now, I'll put it into the Page Dir */
+        pageDir[i].present = 1;
+        pageDir[i].flags =  (VM_WRITE | VM_READ | VM_USER);
+        pageDir[i].pageTableBaseAddr=(uint_t)pageTable;
+
+        /* This would be a great place to map all memory into pages,
+         * but the hacking guide suggests using a different approach,
+         * so I'll do that instead
+         */
+    }
+
+    /* Let's iterate over all pages, and fill each one accordingly.
+     * i here is the i-th page on memory */
+    for(i=0; i<(bootInfo->memSizeKB*1024)/PAGE_SIZE; i++)
+    {
+        /* PROBLEM: so far I've used uint_t as pointers,
+         * but Get_Page uses ulong_t.
+         */
+        addr = i*PAGE_SIZE;
+        tmpPage = Get_Page(addr);
+
+        /* I don't like this - the casting should be way easier */
+        tmpPDEntry = pageDir[PAGE_DIRECTORY_INDEX(addr)];
+        tmpPTEntry = (tmpPDEntry.pageTableBaseAddr);
+        tmpPTEntry2 = (pte_t*)tmpPTEntry;
+        tmpPTEntry2[PAGE_TABLE_INDEX(addr)].accesed = 1;
+        tmpPTEntry2[PAGE_TABLE_INDEX(addr)].dirty = 0;
+        tmpPTEntry2[PAGE_TABLE_INDEX(addr)].flags = (VM_WRITE | VM_READ | VM_USER);
+        tmpPTEntry2[PAGE_TABLE_INDEX(addr)].pageBaseAddr = (uint_t)addr;
+    }
+
+    /* Finally, let's enable paging and pray */
+    Enable_Paging(pageDir);
+
+    /* It would be easy to blame this line for the death of my VM,
+     * but to be fair it died once I added the previous line.
+     * I blame that freaking casting, something's not right in there.
+     */
+    Install_Interrupt_Handler(14, Page_Fault_Handler);
 }
 
 /**
