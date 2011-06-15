@@ -260,7 +260,6 @@ int Build_Pipeline(char *command, struct Process procList[])
 void Spawn_Single_Command(struct Process procList[], int nproc, const char *path)
 {
     int pid;
-    int i;
 
     if (nproc > 1) {
 	Print("Error: pipes not supported yet\n");
@@ -276,13 +275,14 @@ void Spawn_Single_Command(struct Process procList[], int nproc, const char *path
     if (pid < 0)
 	Print("Could not spawn process: %s\n", Get_Error_String(pid));
     else {
-        for(i=strlen(procList[0].command); i>=0; i--)
-        {
-            if(procList[0].command[i]=='&') i= -3;
+        int len_command = strlen(procList[0].command);
+        int i = 0;
+        for( i = len_command ; i > 0 ; --i){
+            if(procList[0].command[i] == '&')
+                break;
         }
 
-        if(i!= -1) {
-            Print("OOOO\n");
+        if(i == 0){
             int exitCode = Wait(pid);
             if (exitCodes)
                 Print("Exit code was %d\n", exitCode);

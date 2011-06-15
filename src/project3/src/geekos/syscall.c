@@ -249,20 +249,19 @@ static int Sys_GetPID(struct Interrupt_State* state)
  */
 static int Sys_SetSchedulingPolicy(struct Interrupt_State* state)
 {
-    /* Return value */
-    int retval=-1;
-
-    if(state->ecx >= 2 && state->ecx <= 100 && (state->ebx ==0 || state->ebx==1)){
-        g_Quantum = state->ecx;
-        if(state->ebx == 0) {
-            g_schedPolicy = SCHED_RROBIN;
-        } else {
-            g_schedPolicy = SCHED_MLFQ;
-        }
-        retval = 0;
+    int policy = state->ebx;
+    int quantum = state->ecx;
+    
+    if(policy!=0 && policy!=1)return -1;
+    if(quantum<2 || quantum>100)return -1;
+    
+    if(g_currentSchedulingPolicy!=policy){
+        g_prevSchedulingPolicy=g_currentSchedulingPolicy;
+        g_currentSchedulingPolicy=policy;
     }
 
-    return retval;
+    g_Quantum=quantum;    
+    return 0;
 }
 
 /*
@@ -274,7 +273,6 @@ static int Sys_SetSchedulingPolicy(struct Interrupt_State* state)
  */
 static int Sys_GetTimeOfDay(struct Interrupt_State* state)
 {
-	/* Trivial */
     return g_numTicks;
 }
 
@@ -306,7 +304,7 @@ static int Sys_CreateSemaphore(struct Interrupt_State* state)
         return EINVALID;
     }
 
-    result = CreateSemaphore(name, nameLength, initCount);
+    result = Create_Semaphore(name, nameLength, initCount);
 
     return result;
 }
@@ -346,7 +344,7 @@ static int Sys_V(struct Interrupt_State* state)
  */
 static int Sys_DestroySemaphore(struct Interrupt_State* state)
 {
-    return DestroySemaphore(state->ebx);
+    return Destroy_Semaphore(state->ebx);
 }
 
 
