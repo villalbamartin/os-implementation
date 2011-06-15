@@ -128,62 +128,58 @@ void Init_VM(struct Boot_Info *bootInfo)
     pte_t* pageTable = NULL;
     struct Page* tmpPage = NULL;
     unsigned int i = 0;
-    unsigned int j = 0;
     ulong_t addr;
-    //pte_t* meh = NULL;
 
     /* First, we create a page directory */
     pageDir = (pde_t*)Alloc_Page();
     memset(pageDir, '\0', PAGE_SIZE);
 
-    /* Now, let's create the page tables
-     * Each table covers 1024 pointers = 1024 pages = 4 MB.
-     * Since PAGE_SIZE is defined in bytes, I'll do:
-     * (Mem in bytes) / (Number of pointers * covered memory)
-     */
-    for(i=0; i<(bootInfo->memSizeKB*1024) / (((PAGE_SIZE)/sizeof(int))*PAGE_SIZE) ; i++)
+    /* Now, I'll create the page tables BACKWARDS! MUAHAHAHAHAHA */
+    for(i=0; i<(bootInfo->memSizeKB*1024)/PAGE_SIZE; i++)
     {
-        /* Let's allocate a page for each Page Table */
-        pageTable = (pte_t*)Alloc_Page();
-        memset(pageTable, '\0', PAGE_SIZE);
+        addr = i*PAGE_SIZE;
 
-        /* And now, I'll put it into the Page Dir */
-        pageDir[i].present = 0x01;
-        pageDir[i].flags |= (VM_WRITE | VM_READ | VM_USER);
-        pageDir[i].pageTableBaseAddr=(uint_t)pageTable;
-
-        /* Let's map the pages now */
-        for(j=0; j<PAGE_SIZE/sizeof(int); j++)
+        /* First, let's see if I need to allocate a new page Table */
+        if(i % (PAGE_SIZE/sizeof(int)) == 0)
         {
-            /* We are not mapping address 0 */
-            if(i!=0 || j!=0)
-            {
-                addr = i*PAGE_SIZE + j*sizeof(int);
+            /* Let's allocate a new Page Table */
+            pageTable = (pte_t*)Alloc_Page();
+            memset(pageTable, '\0', PAGE_SIZE);
+            pageDir[PAGE_DIRECTORY_INDEX(addr)].present = 0x01;
+            pageDir[PAGE_DIRECTORY_INDEX(addr)].flags = VM_WRITE | VM_READ | VM_EXEC | VM_USER;
+            pageDir[PAGE_DIRECTORY_INDEX(addr)].pageTableBaseAddr=PAGE_ALLIGNED_ADDR(pageTable);
+        }
 
-                tmpPage = Get_Page(addr);
-                tmpPage->vaddr = addr;
-                tmpPage->entry = &pageTable[j];
+        /* Now, let's map a new page to its place in the Page Table */
+        if(addr != 0)
+        {
+            tmpPage = Get_Page(addr);
+            tmpPage->flags |= (PAGE_KERN | PAGE_LOCKED);
+            /* | PAGE_ALLOCATED da fail en assert */
+                   tmpPage->vaddr = addr;
+            tmpPage->entry = &pageTable[PAGE_TABLE_INDEX(addr)];
 
-                pageTable[j].present = 1;
-                pageTable[j].accesed = 1;
-                pageTable[j].globalPage = 1;
-                pageTable[j].flags |= (VM_WRITE | VM_READ | VM_USER);
-                pageTable[j].pageBaseAddr = (uint_t)addr;
-               //Print("%i\n", pageTable[j].pageBaseAddr);
-                //Print("i:%i  j:%i  %i\n", i,j,(uint_t)&pageTable[j]);
-            }
+            pageTable[PAGE_TABLE_INDEX(addr)].present = 1;
+            pageTable[PAGE_TABLE_INDEX(addr)].flags = VM_WRITE | VM_READ | VM_EXEC | VM_USER;
+
+            /* I don't know why this works
+             * It should be:
+             * pageTable[PAGE_TABLE_INDEX(addr)].pageBaseAddr = (uint_t)addr;
+             */
+            pageTable[PAGE_TABLE_INDEX(addr)].pageBaseAddr = PAGE_DIRECTORY_INDEX(addr)*1024 + PAGE_TABLE_INDEX(addr); //(uint_t)addr;
         }
     }
 
     /* Finally, let's enable paging and pray */
+    /* Update: not enough faith, pray stronger */
     Enable_Paging(pageDir);
-    //meh = (pte_t*)(0x00000000 | pageDir[0].pageTableBaseAddr);
 
     /* It would be easy to blame this line for the death of my VM,
      * but to be fair it died once I added the previous line.
      * I blame forest Imps
      */
     Install_Interrupt_Handler(14, Page_Fault_Handler);
+
 }
 
 /**

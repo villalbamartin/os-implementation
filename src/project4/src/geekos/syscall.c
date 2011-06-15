@@ -20,7 +20,7 @@
 #include <geekos/user.h>
 #include <geekos/timer.h>
 #include <geekos/vfs.h>
-#include <geekos/semaphore.h>
+#include <geekos/sem.h>
 
 /*
  * Null system call.
