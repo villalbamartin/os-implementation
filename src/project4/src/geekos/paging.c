@@ -125,16 +125,12 @@ void Init_VM(struct Boot_Info *bootInfo)
     /*TODO("Build initial kernel page directory and page tables");*/
 
     pde_t* pageDir = NULL;
-    pde_t tmpPDEntry;
     pte_t* pageTable = NULL;
-    /*pte_t* tmpPTEntry = NULL;
-     * From here on, this variables are probably wrong*/
-    uint_t tmpPTEntry;
-    pte_t* tmpPTEntry2;
-
     struct Page* tmpPage = NULL;
-    int i = 0;
+    unsigned int i = 0;
+    unsigned int j = 0;
     ulong_t addr;
+    //pte_t* meh = NULL;
 
     /* First, we create a page directory */
     pageDir = (pde_t*)Alloc_Page();
@@ -145,49 +141,47 @@ void Init_VM(struct Boot_Info *bootInfo)
      * Since PAGE_SIZE is defined in bytes, I'll do:
      * (Mem in bytes) / (Number of pointers * covered memory)
      */
-    for(i=0; i<bootInfo->memSizeKB*1024 / (((PAGE_SIZE)/sizeof(int))*PAGE_SIZE) ; i++)
+    for(i=0; i<(bootInfo->memSizeKB*1024) / (((PAGE_SIZE)/sizeof(int))*PAGE_SIZE) ; i++)
     {
         /* Let's allocate a page for each Page Table */
         pageTable = (pte_t*)Alloc_Page();
         memset(pageTable, '\0', PAGE_SIZE);
 
         /* And now, I'll put it into the Page Dir */
-        pageDir[i].present = 1;
-        pageDir[i].flags =  (VM_WRITE | VM_READ | VM_USER);
+        pageDir[i].present = 0x01;
+        pageDir[i].flags |= (VM_WRITE | VM_READ | VM_USER);
         pageDir[i].pageTableBaseAddr=(uint_t)pageTable;
 
-        /* This would be a great place to map all memory into pages,
-         * but the hacking guide suggests using a different approach,
-         * so I'll do that instead
-         */
-    }
+        /* Let's map the pages now */
+        for(j=0; j<PAGE_SIZE/sizeof(int); j++)
+        {
+            /* We are not mapping address 0 */
+            if(i!=0 || j!=0)
+            {
+                addr = i*PAGE_SIZE + j*sizeof(int);
 
-    /* Let's iterate over all pages, and fill each one accordingly.
-     * i here is the i-th page on memory */
-    for(i=0; i<(bootInfo->memSizeKB*1024)/PAGE_SIZE; i++)
-    {
-        /* PROBLEM: so far I've used uint_t as pointers,
-         * but Get_Page uses ulong_t.
-         */
-        addr = i*PAGE_SIZE;
-        tmpPage = Get_Page(addr);
+                tmpPage = Get_Page(addr);
+                tmpPage->vaddr = addr;
+                tmpPage->entry = &pageTable[j];
 
-        /* I don't like this - the casting should be way easier */
-        tmpPDEntry = pageDir[PAGE_DIRECTORY_INDEX(addr)];
-        tmpPTEntry = (tmpPDEntry.pageTableBaseAddr);
-        tmpPTEntry2 = (pte_t*)tmpPTEntry;
-        tmpPTEntry2[PAGE_TABLE_INDEX(addr)].accesed = 1;
-        tmpPTEntry2[PAGE_TABLE_INDEX(addr)].dirty = 0;
-        tmpPTEntry2[PAGE_TABLE_INDEX(addr)].flags = (VM_WRITE | VM_READ | VM_USER);
-        tmpPTEntry2[PAGE_TABLE_INDEX(addr)].pageBaseAddr = (uint_t)addr;
+                pageTable[j].present = 1;
+                pageTable[j].accesed = 1;
+                pageTable[j].globalPage = 1;
+                pageTable[j].flags |= (VM_WRITE | VM_READ | VM_USER);
+                pageTable[j].pageBaseAddr = (uint_t)addr;
+               //Print("%i\n", pageTable[j].pageBaseAddr);
+                //Print("i:%i  j:%i  %i\n", i,j,(uint_t)&pageTable[j]);
+            }
+        }
     }
 
     /* Finally, let's enable paging and pray */
     Enable_Paging(pageDir);
+    //meh = (pte_t*)(0x00000000 | pageDir[0].pageTableBaseAddr);
 
     /* It would be easy to blame this line for the death of my VM,
      * but to be fair it died once I added the previous line.
-     * I blame that freaking casting, something's not right in there.
+     * I blame forest Imps
      */
     Install_Interrupt_Handler(14, Page_Fault_Handler);
 }
